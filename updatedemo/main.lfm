@@ -1,0 +1,70 @@
+object frmRun: TfrmRun
+  Left = 707
+  Height = 190
+  Top = 329
+  Width = 446
+  BorderIcons = [biSystemMenu]
+  BorderStyle = bsDialog
+  Caption = 'Update'
+  ClientHeight = 190
+  ClientWidth = 446
+  OnActivate = FormActivate
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  Position = poDesktopCenter
+  ShowHint = True
+  LCLVersion = '1.6.0.4'
+  object labInfo: TLabel
+    Left = 8
+    Height = 103
+    Top = 8
+    Width = 426
+    Alignment = taCenter
+    AutoSize = False
+    Font.Height = -13
+    Layout = tlCenter
+    ParentColor = False
+    ParentFont = False
+  end
+  object progressBar: TProgressBar
+    Left = 8
+    Height = 20
+    Top = 112
+    Width = 432
+    TabOrder = 0
+    Visible = False
+  end
+  object butAction: TButton
+    Left = 365
+    Height = 25
+    Top = 152
+    Width = 75
+    Caption = 'Отмена'
+    OnClick = butActionClick
+    TabOrder = 1
+    Visible = False
+  end
+  object threadUpdate: TWCThread
+    AffinityMask = 1
+    AutoStart = True
+    left = 40
+    top = 8
+    object TaskUpdate: TTask
+      OnExecute = TaskUpdateExecute
+      OnMessage = TaskUpdateMessage
+      OnFinish = TaskUpdateFinish
+    end
+  end
+  object threadWrite: TWCThread
+    AffinityMask = 2
+    AutoStart = True
+    left = 137
+    top = 19
+    object TaskWriteFile: TTask
+      OnExecute = TaskWriteFileExecute
+    end
+    object TaskCloseFile: TTask
+      OnExecute = TaskCloseFileExecute
+    end
+  end
+end

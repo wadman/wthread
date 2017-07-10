@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="4">
+    <PathDelim Value="\"/>
+    <Name Value="Threading"/>
+    <Type Value="RunAndDesignTime"/>
+    <Author Value="wadman"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <IncludeFiles Value="."/>
+        <OtherUnitFiles Value="."/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+    </CompilerOptions>
+    <Description Value="Support simple multithreading"/>
+    <Version Major="1"/>
+    <Files Count="4">
+      <Item1>
+        <Filename Value="wcthread.pas"/>
+        <UnitName Value="wcthread"/>
+      </Item1>
+      <Item2>
+        <Filename Value="wlog.pas"/>
+        <UnitName Value="wlog"/>
+      </Item2>
+      <Item3>
+        <Filename Value="wthread.pas"/>
+        <UnitName Value="wthread"/>
+      </Item3>
+      <Item4>
+        <Filename Value="wcthreadreg.pas"/>
+        <HasRegisterProc Value="True"/>
+        <UnitName Value="wcthreadreg"/>
+      </Item4>
+    </Files>
+    <RequiredPkgs Count="3">
+      <Item1>
+        <PackageName Value="IDEIntf"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="LCLBase"/>
+        <MaxVersion Major="1"/>
+        <MinVersion Major="1" Minor="6" Valid="True"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="FCL"/>
+        <MinVersion Major="1" Valid="True"/>
+      </Item3>
+    </RequiredPkgs>
+    <UsageOptions>
+      <CustomOptions Value="-dUseCThreads"/>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>

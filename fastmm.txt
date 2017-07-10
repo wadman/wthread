@@ -1,0 +1,2 @@
+Prerequisite: In Delphi use FastMM4 memory manager
+https://github.com/pleriche/FastMM4

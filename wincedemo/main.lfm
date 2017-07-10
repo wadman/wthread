@@ -1,0 +1,40 @@
+object Form1: TForm1
+  Left = 774
+  Height = 388
+  Top = 250
+  Width = 509
+  Caption = 'Form1'
+  ClientHeight = 388
+  ClientWidth = 509
+  OnDestroy = FormDestroy
+  LCLVersion = '1.6.0.4'
+  object butDemoTimer: TButton
+    Left = 424
+    Height = 25
+    Top = 8
+    Width = 75
+    Anchors = [akTop, akRight]
+    Caption = 'DemoTimer'
+    OnClick = butDemoTimerClick
+    TabOrder = 0
+  end
+  object Memo1: TMemo
+    Left = 8
+    Height = 370
+    Top = 8
+    Width = 408
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    ScrollBars = ssVertical
+    TabOrder = 1
+  end
+  object WCThread1: TWCThread
+    left = 448
+    top = 48
+    object TaskDemoTimer: TTask
+      OnExecute = TaskDemoTimerExecute
+      OnProgress = TaskDemoTimerProgress
+      OnMessage = TaskDemoTimerMessage
+      OnFinish = TaskDemoTimerFinish
+    end
+  end
+end
