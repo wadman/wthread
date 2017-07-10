@@ -496,7 +496,7 @@ begin
     message := _GetMessage(Msg.LParam);
     param := message^.Parameter;
     message^.task.DoExecute(message^.Msg, param);
-    if message^.task.State = tsDestroying then begin
+    if message^.task.State in [tsRunningDestroy, tsDestroying] then begin
         message^.task.FState := tsReadyToFree;
         _FreeMessage(message);
     end else begin
@@ -535,7 +535,7 @@ begin
         FState := tsFinished;
         FOnFinish(Self, AMsg, AParameter);
     end;
-    if State = tsDestroying then
+    if State in [tsRunningDestroy, tsDestroying] then
         FState := tsReadyToFree;
 end;
 
@@ -546,13 +546,13 @@ end;
 
 procedure TTask.DoProgress(const Msg: Word; const Value: Word);
 begin
-    if (State <> tsDestroying) and Assigned(FOnProgress) then
+    if (not Terminated) and Assigned(FOnProgress) then
         FOnProgress(Self, Msg, Value);
 end;
 
 procedure TTask.DoMessage(const AMsg: Word; const AParameter: Variant);
 begin
-    if (State <> tsDestroying) and Assigned(FOnMessage) then
+    if (not Terminated) and Assigned(FOnMessage) then
         FOnMessage(Self, AMsg, AParameter);
 end;
 
@@ -578,7 +578,7 @@ end;
 
 procedure TTask.PostProgress(const AMsg, AValue: Word);
 begin
-    if (State <> tsDestroying) then begin
+    if (not Terminated) then begin
         if Assigned(FCaller) then begin
             FCaller.PostToThreadMessage(WM_TASK_PROGRESS, 0, _NewMessage(nil, Self, AMsg, AValue));
         end else begin
@@ -589,7 +589,7 @@ end;
 
 procedure TTask.PostMessage(const AMsg: Word; const AParameter: Variant);
 begin
-    if (State <> tsDestroying) then begin
+    if (not Terminated) then begin
         if Assigned(FCaller) then begin
             FCaller.PostToThreadMessage(WM_TASK_MESSAGE, 0, _NewMessage(nil, Self, AMsg, AParameter));
         end else begin
@@ -610,10 +610,10 @@ end;
 
 procedure TTask.PreDestroy;
 begin
-		if FState = tsRunning then
-    		FState := tsRunningDestroy
+    if FState = tsRunning then
+        FState := tsRunningDestroy
     else
-    		FState := tsDestroying;
+        FState := tsDestroying;
     FTerminated := true;
 end;
 
@@ -658,7 +658,7 @@ end;
 
 procedure TTask.Start(const ACaller: TWCThread; const AMsg: Word; const AParam: Variant);
 begin
-    if State = tsDestroying then
+    if Terminated then
         raise Exception.CreateFmt('%s cannot start while destroying.', [Name]);
     FTerminated := false;
     FCaller := ACaller;
