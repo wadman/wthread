@@ -17,7 +17,6 @@ object frmTaskEditor: TfrmTaskEditor
   OnDestroy = FormDestroy
   ShowHint = True
   LCLVersion = '1.9.0.0'
-  Visible = False
   object panTop: TPanel
     Left = 0
     Height = 35

@@ -111,11 +111,11 @@ type
         procedure OnComponentRenamed(AComponent: TComponent);
         procedure OnPersistentDeleting(APersistent: TPersistent);
         procedure OnPersistentDeleted;
-        {.$ifdef ver16 or $ifdef ver19}
+        {$ifdef ver16}
+        procedure OnModified(Sender: TObject; PropName: ShortString);
+        {$else}
         procedure OnModified(Sender: TObject);
-        {.$else}
-        //procedure OnModified(Sender: TObject; PropName: ShortString);
-        {.$endif}
+        {$endif}
         procedure Done;
     end;
     {$ELSE}
@@ -206,11 +206,11 @@ begin
     FNeedUpdate := false;
 end;
 
-{.$ifdef ver16 or $ifdef ver19}
+{$ifdef ver16}
+procedure TLazarusHook.OnModified(Sender: TObject; PropName: ShortString);
+{$else}
 procedure TLazarusHook.OnModified(Sender: TObject);
-{.$else}
-//procedure TLazarusHook.OnModified(Sender: TObject; PropName: ShortString);
-{.$EndIf}
+{$EndIf}
 begin
     if Assigned(frmTaskEditor) then begin
         frmTaskEditor.OnModified(Self);
