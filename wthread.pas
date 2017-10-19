@@ -80,9 +80,9 @@ type
         Sender: TWThread;
     end;
 
-    // событие на получение сообщения из потока
+    // event of receiving messages from the thread
     TWThreadReceiveMessage = procedure(Sender: TWThread; var Msg: TThreadMessage) of object;
-    // событие из потока на таймаут
+    // timeout event
     TWThreadTimeOut = procedure(Sender: TWThread) of object;
 
     TWWaitResult = (
@@ -95,19 +95,30 @@ type
         wwrEvent        = 32
     );
 
-    // дубликат event для корректной работы в fpc/wince
+    // Event for correct work in wince
+
+    { TWEvent }
+
     TWEvent = class(TEvent)
     private
         function GetHandle: THandle;
     protected
         FWHandle: THandle;
+        FParent: TWEvent;
+        FLastResult: TWWaitResult;
+        procedure SetLastResult(const ALastResult: TWWaitResult);
+        procedure SetParent(const AParent: TWEvent);
     public
         constructor Create; overload;
+        constructor Create(EventAttributes: PSecurityAttributes; AManualReset, InitialState: Boolean; const Name: string); overload;
         destructor Destroy; override;
         procedure SetEvent;
         procedure ResetEvent;
         function WaitFor(const TimeOut: Cardinal): TWWaitResult; overload;
+        class function WaitForMultiple(const Events: TEventArray; const Timeout: Cardinal; const WaitAll: Boolean;
+            out SignaledEvent: TWEvent): TWWaitResult;
         property Handle: THandle read GetHandle;
+        property LastResult: TWWaitResult read FLastResult;
     end;
 
     { TWThread }
@@ -119,7 +130,6 @@ type
         {$IFDEF WTHREAD_LIBRARY}
         FQueue: TList;
         FSection: TCriticalSection;
-        //FGUIThread: TThread;
         {$ELSE}
         FQueueReady: boolean;
         FQueueMessages: array of TThreadMessage;
@@ -160,14 +170,13 @@ type
         procedure DoTimeout;
         procedure Execute; override;
         function GetTimeOut: Cardinal; virtual;
-            // отправка сообщения из этого потока другому потоку (см. OwnerWThread)
+            // sending a message from this thread to another thread (see. OwnerWThread)
         procedure PostMessageToWThread(const Msg: Word; const WParam: Word; const LParam: NativeInt);
-            // процедура для очистки памяти в сообщениях, которые остались в очереди сообщений
-            // при уничтожении потока
+            // procedure for clearing memory in messages that are stored in the queue before stopping the thread
         procedure FreeMessage(const Msg: Word; const WParam: Word; const LParam: NativeInt); virtual;
             // см TimeOutIsDirect, при true - перекрыть следующую процедуру
         procedure DirectTimeOut; virtual;
-        // Две процедуры, которые выполняются в контексте потока. В начале и в конце.
+        // procedures that are called in the context of the thread (at the beginning and at the end)
         procedure InitThread; virtual;
         procedure DoneThread; virtual;
     public
@@ -184,31 +193,30 @@ type
         constructor Create(CreateSuspended: boolean); overload;
         constructor Create; overload;
         procedure AfterConstruction; override;
-            // проверяет наличие сообщений в очереди
+            // checking for messages in the queue
         function HaveMessages(const Msg: Word = WM_ANY_MESSAGE): boolean;
-        // проверяет, что выполнение идет в этом (доп) потоке
+            // checking for execution in this thread
         function ItsMe: boolean;
         procedure WaitMs(const Ms: cardinal);
         class function ProcessorCount: integer;
         destructor Destroy; override;
-            // отправка любого сообщения В этот поток
+            // send a message to this thread
         function PostToThreadMessage(const Msg: Word; const WParam: Word; const LParam: NativeInt): Boolean;
-            // отправка сообщения из этого потока для вызова обработчика OnThreadReceiveMessage
+            // send a message from this thread for processing in another or main thread (see OnThreadReceiveMessage)
         procedure PostMessageFromThread(const Msg: Word; const WParam: Word; const LParam: NativeInt);
-            // остановка потока по феншую
+            // stop thread
         procedure Terminate;
-            // событие на получение данных ИЗ этого потока, вызывается в основном потоке
+            // event of receiving a message from this thread
         property OnThreadReceiveMessage: TWThreadReceiveMessage read FOnThreadReceiveMessage write SetOnThreadReceiveMessage;
-            // доп.поток, которому отправляются сообщения с помощью PostMessageToWThread
+            // thread to which messages are sent by the PostMessageToWThread procedure
         property OwnerWThread: TWThread read FOwnerWThread; // write FOwnerWThread;
-            // событие, возникающее при превышении интервала ожидания
+            // event occurring when the timeout interval is exceeded
         property OnTimeOut: TWThreadTimeOut read FOnTimeOut write SetOnTimeOut;
-            // интервал ожидания в мс, по-умолчанию - бесконечно
+            // wait interval, default is infinite
         property TimeOut: Cardinal read GetTimeOut write SetTimeOut default INFINITE;
-            // true = Будет вызван DirectTimeOut из этого потока, false = вызвано событие OnTimeOut в основном потоке.
+            // where the timeout handler should be called: in this thread or the main thread
         property TimeOutIsDirect: boolean read FTimeOutIsDirect write FTimeOutIsDirect default false;
-            // на каких ядрах/процессорах работать этому потоку? см. ProcessorCount
-            // 1 - только первое ядро, 2 - только второе ядро, 3 - ядро 1 и 2. и т.д.
+            // affinity mask is a bit mask indicating what processor(s) a thread should be run
         property AffinityMask: Cardinal read GetAffinityMask write SetAffinityMask;
         {$IFDEF WTHREAD_DEBUG_LOG}
         property UseDebugLog: boolean read FUseDebugLog write FUseDebugLog default false;
@@ -217,18 +225,21 @@ type
         property Terminated: boolean read GetTerminated;
     end;
 
-    // подготовка строки к обмену между потоками
+    // preparation of a string for transfer between streams with allocation of memory
 function NewString(const Text: string): NativeInt;
 
-    // возвращение строки к привычному виду после приема из другого потока
+    // freeing memory and returning a string
 function FreeString(var P: NativeInt): String;
 
 implementation
 
 {$IFDEF FPC}
-{$IFDEF UNIX}
-uses UTF8Process;
-{$ENDIF}
+uses
+    {$IFDEF UNIX}
+    UTF8Process,
+    {$ENDIF}
+    LCLIntf
+    ;
 {$ENDIF}
 
 const
@@ -340,11 +351,17 @@ function pthread_getaffinity_np(pid: PtrUInt; cpusetsize: LongInt; cpuset: Point
 
 constructor TWEvent.Create;
 begin
+    Create(nil, true, false, '');
+end;
+
+constructor TWEvent.Create(EventAttributes: PSecurityAttributes; AManualReset, InitialState: Boolean; const Name: string);
+begin
     {$IFDEF WINCE}
-    FWHandle := CreateEvent(nil, false, false, nil);
+    FWHandle := CreateEvent(EventAttributes, AManualReset, InitialState, Name);
     {$ELSE}
-    inherited Create(nil, false, false, '');
+    inherited Create(EventAttributes, AManualReset, InitialState, Name);
     {$ENDIF}
+    FLastResult := wwrNone;
 end;
 
 destructor TWEvent.Destroy;
@@ -365,94 +382,20 @@ begin
     {$ENDIF}
 end;
 
-(*class function TWEvent.WaitForMultiple(const HandleObjs: THandleArray; const Timeout: Cardinal; const AAll: Boolean;
-    out SignaledObj: THandle; const Len: Integer = 0; const WaitMs: DWord = 100): TWWaitResult;
-var I, L: word;
-    Handles: THandleArray;
-{$IFDEF WTHREAD_WINDOWS}
-    WaitResult: DWORD;
-{$ELSE}
-    fired: array of TWWaitResult;
-    firedCnt: word;
-    intTimeout,
-    cntTimeout: cardinal;
-{$ENDIF}
+procedure TWEvent.SetLastResult(const ALastResult: TWWaitResult);
 begin
-    SignaledObj := 0;
-    if Len > 0 then
-        if Len > Length(HandleObjs) then
-            L := Length(HandleObjs)
-        else
-            L := Len
-    else
-        L := Length(HandleObjs);
-    SetLength(Handles, L);
-    for I := Low(Handles) to High(Handles) do
-        Handles[I] := HandleObjs[I];
-{$IFDEF WTHREAD_WINDOWS}
-    WaitResult := WaitForMultipleObjectsEx(Length(Handles), @Handles[0], AAll, Timeout, true);
-    case WaitResult of
-        WAIT_ABANDONED_0..WAIT_ABANDONED_0 + MAXIMUM_WAIT_OBJECTS - 1: begin
-            Result := wwrAbandoned;
-            SignaledObj := HandleObjs[WaitResult - WAIT_ABANDONED_0];
+    if ALastResult <> wwrTimeout then begin
+        FLastResult := ALastResult;
+        if Assigned(FParent) then begin
+            FParent.SetEvent;
         end;
-        WAIT_TIMEOUT: Result := wwrTimeout;
-        WAIT_FAILED: Result := wwrError;
-        WAIT_IO_COMPLETION: Result := wwrIOCompletion;
-        WAIT_OBJECT_0..WAIT_OBJECT_0 + MAXIMUM_WAIT_OBJECTS - 1: begin
-            Result := wwrSignaled;
-            SignaledObj := HandleObjs[WaitResult - WAIT_OBJECT_0];
-        end;
-    else if WaitResult = L then
-        result := wwrEvent
-    else
-        Result := wwrError;
     end;
-{$ELSE}
-    if L = 1 then begin
-        result := TWEvent.WaitFor(HandleObjs[0], Timeout);
-        if result in [wwrAbandoned, wwrSignaled] then
-            SignaledObj := HandleObjs[0];
-    end else if L > 1 then begin
-        SetLength(fired, L);
-        firedCnt := 0;
-        if Timeout <> INFINITE then begin
-            intTimeout := WaitMs;
-            if (intTimeout * L > WaitMs) and AAll then
-                intTimeout := WaitMs div L;
-            cntTimeout := Timeout;
-        end else begin
-            intTimeout := WaitMs;
-            cntTimeout := INFINITE;
-        end;
-        repeat
-            for I := Low(Handles) to High(Handles) do begin
+end;
 
-                if not LongBool(fired[i]) then begin
-                    fired[i] := TWEvent.WaitFor(Handles[i], intTimeout);
-
-                    if AAll then begin
-                        if fired[i] <> wwrTimeout then inc(firedCnt);
-                        if firedCnt = L then exit(fired[i]);
-                    end;
-
-                    if (cntTimeout = INFINITE) then begin
-                        if (fired[i] <> wwrTimeout) then begin
-                            SignaledObj := Handles[i];
-                            exit(fired[i]);
-                        end;
-                    end else begin
-                        dec(cntTimeout, intTimeout);
-                        if cntTimeout < 1 then exit(wwrTimeout);
-                    end;
-
-                end;
-            end;
-        until true;
-    end else
-        result := wwrError;
-{$ENDIF}
-end;*)
+procedure TWEvent.SetParent(const AParent: TWEvent);
+begin
+    FParent := AParent;
+end;
 
 procedure TWEvent.ResetEvent;
 begin
@@ -461,10 +404,12 @@ begin
     {$ELSE}
     inherited ResetEvent;
     {$ENDIF}
+    FLastResult := wwrNone;
 end;
 
 procedure TWEvent.SetEvent;
 begin
+    SetLastResult(wwrSignaled);
     {$IFDEF WINCE}
     Windows.SetEvent(FWHandle);
     {$ELSE}
@@ -475,7 +420,9 @@ end;
 function TWEvent.WaitFor(const TimeOut: Cardinal): TWWaitResult;
 {$IFDEF WINCE}
 var dw: DWord;
+{$ENDIF}
 begin
+{$IFDEF WINCE}
     dw := WaitForSingleObject(FWHandle, TimeOut);
     case dw of
         WAIT_ABANDONED: result := wwrAbandoned;
@@ -484,9 +431,7 @@ begin
         WAIT_IO_COMPLETION: result := wwrIOCompletion;
     else
         Result := wwrError;
-end;
 {$ELSE}
-begin
     case inherited WaitFor(TimeOut) of
         wrSignaled: result := wwrSignaled;
         wrTimeout: result := wwrTimeout;
@@ -496,6 +441,79 @@ begin
         result := wwrIOCompletion;
     end;
 {$ENDIF}
+    SetLastResult(result);
+end;
+
+class function TWEvent.WaitForMultiple(const Events: TEventArray; const Timeout: Cardinal; const WaitAll: Boolean;
+    out SignaledEvent: TWEvent): TWWaitResult;
+
+type
+    TBooleanArray = array of Boolean;
+
+var OwnEvent: TWEvent;
+    FiredEvents: TBooleanArray;
+    fired: integer;
+    ticks: DWORD;
+    Len: integer;
+    VTimeout: Int64;
+
+    procedure SetParents(const AParent: TWEvent);
+    var i: integer;
+    begin
+        for i := Low(Events) to High(Events) do begin
+            Events[i].SetParent(AParent);
+            FiredEvents[i] := false;
+        end;
+    end;
+
+    function GetFiredCount: integer;
+    var i: integer;
+    begin
+        result := 0;
+        for i := Low(Events) to High(Events) do if not FiredEvents[i] then begin
+            if Events[i].WaitFor(0) in [wwrSignaled, wwrIOCompletion] then begin
+                SignaledEvent := Events[i];
+                FiredEvents[i] := true;
+            end;
+        end;
+        for i := Low(FiredEvents) to High(FiredEvents) do
+            if FiredEvents[i] then inc(Result);
+    end;
+
+begin
+    SignaledEvent := nil;
+    Result := wwrNone;
+    Len := Length(Events);
+    if Len = 0 then exit;
+    SetLength(FiredEvents, Len);
+    VTimeout := Timeout;
+    fired := 0;
+    try
+        OwnEvent := TWEvent.Create(nil, false, false, 'OwnerEvent');
+        SetParents(OwnEvent);
+        if VTimeout <> INFINITE then begin
+            ticks := GetTickCount64;
+        end;
+        while ((fired <> Len) and WaitAll) or ((fired = 0) and (not WaitAll)) do begin
+            Result := OwnEvent.WaitFor(VTimeout);
+            fired := GetFiredCount;
+            if VTimeout <> INFINITE then begin
+                VTimeout := VTimeout - (GetTickCount64 - ticks);
+                ticks := GetTickCount64;
+                if (VTimeout <= 0) then begin
+                    break;
+                end;
+            end;
+        end;
+        SetParents(nil);
+    finally
+        OwnEvent.Free;
+    end;
+    if Assigned(SignaledEvent) and (((fired = Len) and WaitAll) or ((fired <> 0) and (not WaitAll))) then begin
+        Result := SignaledEvent.LastResult;
+    end else begin
+        Result := wwrTimeout;
+    end;
 end;
 
 {$IFDEF WTHREAD_LIBRARY}
@@ -584,10 +602,9 @@ end;
 constructor TGUIThread.Create;
 begin
     inherited Create(False);
-    FMessageEvent := TWEvent.Create;
+    FMessageEvent := TWEvent.Create(nil, false, false, 'GUIThreadEvent');
     FQueue := TList.Create;
     FSection := TCriticalSection.Create;
-    //FOwner := AOwner;
     FreeOnTerminate := true;
 end;
 
@@ -640,7 +657,7 @@ begin
         FThreadName := 'Thread'
     else
         FThreadName := AThreadName;
-    FHandleEvent := TWEvent.Create;
+    FHandleEvent := TWEvent.Create(nil, false, false, FThreadName+'HandleEvent');
     {$IFDEF WTHREAD_LIBRARY}
     FQueue := TList.Create;
     FSection := TCriticalSection.Create;
@@ -723,7 +740,7 @@ begin
     // override
 end;
 
-// Процедура, выполняющая в контексте этого потока перед запуском очереди сообщений (в начале работы потока).
+// procedure that executes in the context of this thread before running the message queue.
 procedure TWThread.InitThread;
 begin
     // empty
@@ -773,6 +790,7 @@ begin
 {$ENDIF}
 end;
 
+// procedure that executes in the context of this thread after the message queue ends
 procedure TWThread.DoneThread;
 begin
     // empty
@@ -795,7 +813,7 @@ begin
         FOnTimeOut(Self);
 end;
 
-// отправка любого сообщения В этот поток
+// sending message to this thread
 function TWThread.PostToThreadMessage(const Msg: Word; const WParam: Word;
     const LParam: NativeInt): Boolean;
 {$IFDEF WTHREAD_LIBRARY}

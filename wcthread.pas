@@ -23,7 +23,7 @@ type
     TTaskExecute    = procedure(const Sender: TTask; const Msg: Word; var Param: Variant) of object;
     TTaskFinish     = procedure(const Sender: TTask; const Msg: Word; const Param: Variant) of object;
     TTaskProgress   = procedure(const Sender: TTask; const Msg: Word; const Value: Word) of object;
-    TTaskMessage    = procedure(const Sender: TTask; const Msg: Word; const Parameter: Variant) of object;
+    TTaskMessage    = procedure(const Sender: TTask; const Msg: Word; const Param: Variant) of object;
     TWCThreadNotify = procedure(const Sender: TWCthread) of object;
 
     TTaskState      = (tsWait, tsRunning, tsRunningDestroy, tsFinished, tsDestroying, tsReadyToFree);
@@ -100,7 +100,7 @@ type
         property Tag;
     end;
 
-    // TWhread component, (c) wadman
+    // TWCThread component, (c) wadman
     // Add a tasks and fill OnExecute event for every
 
     { TWCThread }
@@ -517,7 +517,7 @@ end;
 
 destructor TTask.Destroy;
 begin
-		PreDestroy;
+    PreDestroy;
     Parent := nil;
     inherited;
 end;
@@ -602,7 +602,7 @@ procedure TTask.WaitMs(const Ms: cardinal);
 var curms: integer;
 begin
     curms := ms;
-    while (not Terminated) and (curms > 0) do begin
+    while (not Terminated) and LongBool(curms) do begin
         Sleep(INTERNAL_WAIT_TIMEOUT);
         dec(curms, INTERNAL_WAIT_TIMEOUT);
     end;
