@@ -342,6 +342,15 @@ begin
 end;
 {$ENDIF}
 
+function WGetTickCount: Int64;
+begin
+{$IFDEF FPC}
+    result := GetTickCount64;
+{$ELSE}
+    result := GetTickCount;
+{$ENDIF}
+end;
+
 {$IFDEF UNIX}
 function sched_getaffinity(pid: PtrUInt; cpusetsize: LongInt; cpuset: Pointer): LongInt; cdecl; external;
 function sched_setaffinity(pid: PtrUInt; cpusetsize: LongInt; cpuset: Pointer): LongInt; cdecl; external;
@@ -453,7 +462,7 @@ type
 var OwnEvent: TWEvent;
     FiredEvents: TBooleanArray;
     fired: integer;
-    ticks: DWORD;
+    ticks: Int64;
     Len: integer;
     VTimeout: Int64;
 
@@ -492,14 +501,14 @@ begin
         OwnEvent := TWEvent.Create(nil, false, false, 'OwnerEvent');
         SetParents(OwnEvent);
         if VTimeout <> INFINITE then begin
-            ticks := GetTickCount64;
+            ticks := WGetTickCount;
         end;
         while ((fired <> Len) and WaitAll) or ((fired = 0) and (not WaitAll)) do begin
             Result := OwnEvent.WaitFor(VTimeout);
             fired := GetFiredCount;
             if VTimeout <> INFINITE then begin
-                VTimeout := VTimeout - (GetTickCount64 - ticks);
-                ticks := GetTickCount64;
+                VTimeout := VTimeout - (WGetTickCount - ticks);
+                ticks := WGetTickCount;
                 if (VTimeout <= 0) then begin
                     break;
                 end;
