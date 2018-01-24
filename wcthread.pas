@@ -343,7 +343,7 @@ end;
 procedure TWCThread.Loaded;
 begin
     inherited;
-    if AutoStart then begin
+    if AutoStart and (not (csDesigning in ComponentState)) then begin
         FAutoStart := StartThread;
     end;
 end;

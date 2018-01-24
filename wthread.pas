@@ -408,12 +408,12 @@ end;
 
 procedure TWEvent.ResetEvent;
 begin
+    FLastResult := wwrNone;
     {$IFDEF WINCE}
     Windows.ResetEvent(FWHandle);
     {$ELSE}
     inherited ResetEvent;
     {$ENDIF}
-    FLastResult := wwrNone;
 end;
 
 procedure TWEvent.SetEvent;
@@ -576,6 +576,7 @@ var Message: PThreadMessage;
 begin
     while not Terminated do begin
         wr := FMessageEvent.WaitFor(INFINITE);
+        FMessageEvent.ResetEvent;
         if (not Terminated) and (wr = wwrSignaled) then begin
             while FQueue.Count > 0 do begin
                 FSection.Enter;
@@ -611,7 +612,7 @@ end;
 constructor TGUIThread.Create;
 begin
     inherited Create(False);
-    FMessageEvent := TWEvent.Create(nil, false, false, 'GUIThreadEvent');
+    FMessageEvent := TWEvent.Create(nil, true, false, 'GUIThreadEvent');
     FQueue := TList.Create;
     FSection := TCriticalSection.Create;
     FreeOnTerminate := true;
@@ -666,7 +667,7 @@ begin
         FThreadName := 'Thread'
     else
         FThreadName := AThreadName;
-    FHandleEvent := TWEvent.Create(nil, false, false, FThreadName+'HandleEvent');
+    FHandleEvent := TWEvent.Create(nil, true, false, FThreadName+'HandleEvent');
     {$IFDEF WTHREAD_LIBRARY}
     FQueue := TList.Create;
     FSection := TCriticalSection.Create;
@@ -1011,6 +1012,7 @@ begin
     {$ENDIF}
     while not Terminated do begin
         WR := FHandleEvent.WaitFor(internalTimeout);
+        FHandleEvent.ResetEvent;
         busy := Now;
         if not Terminated then
             case WR of
@@ -1099,6 +1101,7 @@ begin
     while not Terminated do begin
         if (not PeekMessage(msg, 0, 0, 0, PM_REMOVE)) then begin
             dwHandleSignaled := MsgWaitForMultipleObjects(1, HandlesWaitFor, false, internalTimeout, QS_ALLEVENTS);
+            FHandleEvent.ResetEvent;
             busy := Now;
             if not Terminated then case dwHandleSignaled of
                 WAIT_FAILED: begin
