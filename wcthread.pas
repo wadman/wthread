@@ -1,7 +1,7 @@
 unit wcthread;
 // component for work with a thread, Delphi&Lazarus (win&wince&*nix)
 //
-// (c) wadman 2016-2017, from 10.07.2017
+// (c) wadman 2016-2018, from 02.02.2018
 
 
 interface
@@ -13,9 +13,6 @@ interface
 uses Classes, SysUtils, wthread, Variants;
 
 type
-    {$IFNDEF FPC}
-    PtrInt          = Integer;
-    {$ENDIF}
     TWCThread       = class;
     TOwnedList      = class;
     TTask           = class;
@@ -563,7 +560,7 @@ end;
 
 function TTask.GetTerminated: boolean;
 begin
-    Result := (State in [tsRunningDestroy, tsDestroying, tsReadyToFree]) or FTerminated;
+    Result := FTerminated or (State in [tsRunningDestroy, tsDestroying, tsReadyToFree]);
 end;
 
 function TTask.HasParent: Boolean;
@@ -599,13 +596,8 @@ begin
 end;
 
 procedure TTask.WaitMs(const Ms: cardinal);
-var curms: integer;
 begin
-    curms := ms;
-    while (not Terminated) and LongBool(curms) do begin
-        Sleep(INTERNAL_WAIT_TIMEOUT);
-        dec(curms, INTERNAL_WAIT_TIMEOUT);
-    end;
+    FParent.FWThread.WaitMs(ms);
 end;
 
 procedure TTask.PreDestroy;

@@ -1,5 +1,5 @@
 ﻿unit wlog;
-// wlog (c) wadman, 2015-2017, 11.04.2017
+// wlog (c) wadman, 2015-2018, 02.02.2018
 // multithread safe logging
 
 interface
@@ -45,7 +45,7 @@ type
     PLogRecord = ^TLogRecord;
     TLogRecord = record
         DT: TDateTime;
-        PString: NativeInt;
+        PString: PtrUInt;
     end;
 
     TLogThread = class(TWThread)
@@ -85,7 +85,7 @@ begin
             p^.DT := ADateTime;
             p^.PString := NewString(Text);
 {$HINTS OFF}
-            result := LogThread.PostToThreadMessage(WM_LOG, 0, NativeInt(p));
+            result := LogThread.PostToThreadMessage(WM_LOG, 0, PtrUInt(p));
 {$HINTS ON}
             if not result then begin
                 FreeString(p^.PString);

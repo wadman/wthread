@@ -1,7 +1,9 @@
 unit wthread;
+// Component for work with a thread, Delphi&Lazarus (win&wince&*nix)
+// (c) wadman 2016-2018, from 02.02.2018
 // модуль для работы с доп.потоками Delphi&Lazarus (win&wince&*nix)
 // позволяет "общаться" дополнительному и основному потокам посредством очереди сообщений
-// (c) wadman 2013-2017, версия от 10.07.2017
+// (c) wadman 2013-2018, версия от 02.02.2018
 //
 // использование:
 // 1. Создать наследника с объявленными обработчиками сообщений
@@ -41,7 +43,6 @@ uses
     {$IFNDEF FPC}
     ,Messages
     {$ENDIF}
-    ,contnrs
     {$IFDEF WINDOWS}
     ,Windows
     {$ENDIF}
@@ -49,8 +50,6 @@ uses
     ;
 
 const
-    INTERNAL_WAIT_TIMEOUT   = 10;
-
     WM_ANY_MESSAGE      = 0;
 
     WM_USER             = $400;
@@ -58,6 +57,10 @@ const
     WM_WTHREAD_MAX      = WM_USER + $300;
 
 type
+    {$IFNDEF FPC}
+    PtrInt          = Cardinal;
+    PtrUInt         = DWord;
+    {$ENDIF}
     {$IFDEF FPC}
     MessageWord         = DWord;
     {$IFNDEF WINCE}
@@ -145,6 +148,7 @@ type
         function intPostToLog(const Text: string; const Level: TLogLevel): boolean; overload;
         {$ENDIF}
         function GetMsFromDateTime(const Value: TDateTime): Cardinal;
+        function GetTimerResolution: Cardinal;
         procedure SetTimeOut(const Value: Cardinal);
         procedure FreeQueue;
         function GetAffinityMask: Cardinal;
@@ -222,14 +226,18 @@ type
         property UseDebugLog: boolean read FUseDebugLog write FUseDebugLog default false;
         {$ENDIF}
         property ThreadName: string read FThreadName;
+        property TimerResolution: Cardinal read GetTimerResolution;
         property Terminated: boolean read GetTerminated;
     end;
 
     // preparation of a string for transfer between streams with allocation of memory
-function NewString(const Text: string): NativeInt;
+function NewString(const Text: string): PtrUInt;
 
     // freeing memory and returning a string
-function FreeString(var P: NativeInt): String;
+function FreeString(var P: PtrUInt): String;
+
+var
+    INTERNAL_WAIT_TIMEOUT: integer = 10;
 
 implementation
 
@@ -238,6 +246,7 @@ uses
     {$IFDEF UNIX}
     UTF8Process,
     {$ENDIF}
+    DateUtils,
     LCLIntf
     ;
 {$ENDIF}
@@ -292,7 +301,7 @@ end;
 {$ENDIF}
 
 // для передачи строки в пределах одной программы
-function FreeString(var P: NativeInt): String;
+function FreeString(var P: PtrUInt): String;
 begin
     {$HINTS OFF}
     if LongBool(P) then begin
@@ -312,7 +321,7 @@ begin
 end;
 
 // для передачи строки в пределах одной программы
-function NewString(const Text: string): NativeInt;
+function NewString(const Text: string): PtrUInt;
 var l: Integer;
 begin
     l := Length(Text)*SizeOfChar;
@@ -329,16 +338,16 @@ begin
         Result := 0;
 end;
 {$ELSE}
-function NewString(const Text: string): NativeInt;
+function NewString(const Text: string): PtrUInt;
 begin
     Result := 0;
     string(Result) := Text;
 end;
 
-function FreeString(var P: NativeInt): String;
+function FreeString(var P: PtrUInt): String;
 begin
     Result := '';
-    NativeInt(Result) := P;
+    PtrUInt(Result) := P;
 end;
 {$ENDIF}
 
@@ -579,10 +588,13 @@ begin
         FMessageEvent.ResetEvent;
         if (not Terminated) and (wr = wwrSignaled) then begin
             while FQueue.Count > 0 do begin
-                FSection.Enter;
-                Message := FQueue[0];
-                FQueue.Delete(0);
-                FSection.Leave;
+                try
+                    FSection.Enter;
+                    Message := FQueue[0];
+                    FQueue.Delete(0);
+                finally
+                    FSection.Leave;
+                end;
                 FCurrentMessage := Message^;
                 FreeMem(Message);
                 if  ((FCurrentMessage.Message = WM_WTIMEOUT) or ((FCurrentMessage.Message >= WM_WTHREAD_BASE)
@@ -635,9 +647,12 @@ begin
     Msg^.WParam := WParam;
     Msg^.LParam := LParam;
     Msg^.Sender := Sender;
-    FSection.Enter;
-    FQueue.Add(Msg);
-    FSection.Leave;
+    try
+        FSection.Enter;
+        FQueue.Add(Msg);
+    finally
+        FSection.Leave;
+    end;
     FMessageEvent.SetEvent;
 end;
 
@@ -766,12 +781,11 @@ begin
 end;
 
 procedure TWThread.WaitMs(const Ms: cardinal);
-var curms: integer;
+var cur: TDateTime;
 begin
-    curms := ms;
-    while (not Terminated) and (curms > 0) do begin
+    cur := Now;
+    while (not Terminated) and (MilliSecondsBetween(Now, cur) < ms) do begin
         Sleep(INTERNAL_WAIT_TIMEOUT);
-        dec(curms, INTERNAL_WAIT_TIMEOUT);
     end;
 end;
 
@@ -785,11 +799,16 @@ begin
     else begin
         if result then begin
             result := false;
-            for i := 0 to FQueue.Count-1 do
-                if PThreadMessage(FQueue[i])^.Message = Msg then begin
-                    result := true;
-                    break;
-                end;
+            try
+                FSection.Enter;
+                for i := 0 to FQueue.Count-1 do
+                    if PThreadMessage(FQueue[i])^.Message = Msg then begin
+                        result := true;
+                        break;
+                    end;
+            finally
+                FSection.Leave;
+            end;
         end;
     end
 {$ELSE}
@@ -835,9 +854,12 @@ begin
     PMsg^.Message := Msg;
     PMsg^.WParam := WParam;
     PMsg^.LParam := LParam;
-    FSection.Enter;
-    FQueue.Add(PMsg);
-    FSection.Leave;
+    try
+        FSection.Enter;
+        FQueue.Add(PMsg);
+    finally
+        FSection.Leave;
+    end;
     {$IFDEF WTHREAD_DEBUG_LOG}
     intPostToLog(Format('send to me msg: %d (0x%0:x).', [Msg]), WLL_EXTRA);
     {$ENDIF}
@@ -900,6 +922,14 @@ end;
 function TWThread.GetMsFromDateTime(const Value: TDateTime): Cardinal;
 begin
     Result := Round((Now - Value) / OneMillisecond);
+end;
+
+function TWThread.GetTimerResolution: Cardinal;
+var ms: TDateTime;
+begin
+    ms := Now;
+    Sleep(1);
+    result := MilliSecondsBetween(ms, Now);
 end;
 
 procedure TWThread.SetAffinityMask(const Value: Cardinal);
@@ -980,14 +1010,17 @@ procedure TWThread.FreeQueue;
 {$IFDEF WTHREAD_LIBRARY}
 var PMsg: PThreadMessage;
 begin
-    FSection.Enter;
-    while FQueue.Count > 0 do begin
-        PMsg := FQueue[0];
-        FQueue.Delete(0);
-        FreeMessage(PMsg^.Message, PMsg^.WParam, PMsg^.LParam);
-        FreeMem(PMsg);
+    try
+        FSection.Enter;
+        while FQueue.Count > 0 do begin
+            PMsg := FQueue[0];
+            FQueue.Delete(0);
+            FreeMessage(PMsg^.Message, PMsg^.WParam, PMsg^.LParam);
+            FreeMem(PMsg);
+        end;
+    finally
+        FSection.Leave;
     end;
-    FSection.Leave;
 {$ELSE}
 begin
 {$ENDIF}
@@ -1021,10 +1054,13 @@ begin
                     intPostToLog(Format('got signal (queue cnt: %d).', [FQueue.Count]), WLL_EXTRA);
                     {$ENDIF}
                     while FQueue.Count > 0 do begin
-                        FSection.Enter;
-                        Message := FQueue[0];
-                        FQueue.Delete(0);
-                        FSection.Leave;
+                        try
+                            FSection.Enter;
+                            Message := FQueue[0];
+                            FQueue.Delete(0);
+                        finally
+                            FSection.Leave;
+                        end;
                         if (Message^.message >= WM_WTHREAD_BASE)
                             and (Message^.Message <= WM_WTHREAD_MAX) then begin
                                 {$IFDEF WTHREAD_DEBUG_LOG}

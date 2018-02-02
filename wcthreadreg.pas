@@ -26,7 +26,6 @@ uses
     ComCtrls,
     ActnList,
     Buttons,
-    ImgList,
     SysUtils;
 
 type
