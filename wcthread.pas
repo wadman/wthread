@@ -1,7 +1,7 @@
 unit wcthread;
 // component for work with a thread, Delphi&Lazarus (win&wince&*nix)
 //
-// (c) wadman 2016-2018, from 02.02.2018
+// (c) wadman 2016-2018, from 30.03.2018
 
 
 interface
@@ -373,7 +373,7 @@ begin
             if Assigned(message) then begin
                 message^.task.DoFinish(message^.Msg, message^.Parameter);
             end;
-            if not FWThread.HaveMessages(WM_TASK_START) then
+            if not WordBool(Msg.WParam) then
                 DoAllTasksFinished;
         end;
         WM_TASK_PROGRESS: begin
@@ -501,10 +501,10 @@ begin
         message^.task.FState := tsFinished;
         message^.Parameter := param;
         if Assigned(message^.callThread) then begin
-            message^.callThread.PostToThreadMessage(WM_TASK_FINISH, 0, PtrInt(message));
-            PostMessageFromThread(WM_TASK_FINISH, 0, 0);
+            message^.callThread.PostToThreadMessage(WM_TASK_FINISH, Word(HaveMessages(WM_TASK_START)), PtrInt(message));
+            PostMessageFromThread(WM_TASK_FINISH, Word(HaveMessages(WM_TASK_START)), 0);
         end else begin
-            PostMessageFromThread(WM_TASK_FINISH, 0, PtrInt(message));
+            PostMessageFromThread(WM_TASK_FINISH, Word(HaveMessages(WM_TASK_START)), PtrInt(message));
         end;
         {$Hints on}
     end;

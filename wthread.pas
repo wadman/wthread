@@ -1,11 +1,11 @@
 unit wthread;
 // Component for work with a thread, Delphi&Lazarus (win&wince&*nix)
 // (c) wadman 2016-2018, from 02.02.2018
-// модуль для работы с доп.потоками Delphi&Lazarus (win&wince&*nix)
-// позволяет "общаться" дополнительному и основному потокам посредством очереди сообщений
-// (c) wadman 2013-2018, версия от 02.02.2018
+// Module for working with additional threads Delphi&Lazarus (win&wince&*nix)
+// Allows you to configure messages between the main thread and additional threads
+// (c) wadman 2013-2018, версия от 30.03.2018
 //
-// использование:
+// usage:
 // 1. Создать наследника с объявленными обработчиками сообщений
 //  const WM_TEST_PROC = WM_THREAD_BASE + 1;
 //  TMyThread = class(TWThread)
@@ -14,7 +14,7 @@ unit wthread;
 //  см. PostToThreadMessage
 // 2. Присвоить форме обработчика(ов) события OnThreadReceiveMessage (OnTimeOut - при необходимости)
 //
-// Для обмена строками рекомендуется использовать функции NewString и FreeString
+// It is recommended to use functions NewString and FreeString for passing strings
 {$IFDEF FPC}
 {$mode delphi}{$H+}
     {$DEFINE WTHREAD_LIBRARY}
@@ -24,10 +24,12 @@ unit wthread;
 {$ENDIF}
 
 {$IFDEF UNIX}
-    {$LINKLIB libc.so}
+    {$IFNDEF DARWIN}
+        {$LINKLIB libc.so}
+    {$ENDIF}
 {$ENDIF}
 
-// для передачи строк между потоками используется выделенная память
+// The allocated memory is used to transfer the strings. It is safe.
 {$DEFINE ALLOC_STRING}
 
 {$I wthread.inc}
@@ -249,6 +251,9 @@ uses
     DateUtils,
     LCLIntf
     ;
+{$ELSE}
+uses
+    DateUtils;
 {$ENDIF}
 
 const
@@ -361,10 +366,12 @@ begin
 end;
 
 {$IFDEF UNIX}
+    {$IFNDEF DARWIN}
 function sched_getaffinity(pid: PtrUInt; cpusetsize: LongInt; cpuset: Pointer): LongInt; cdecl; external;
 function sched_setaffinity(pid: PtrUInt; cpusetsize: LongInt; cpuset: Pointer): LongInt; cdecl; external;
 function pthread_setaffinity_np(pid: PtrUInt; cpusetsize: LongInt; cpuset: Pointer): LongInt; cdecl; external;
 function pthread_getaffinity_np(pid: PtrUInt; cpusetsize: LongInt; cpuset: Pointer) : LongInt; cdecl; external;
+    {$ENDIF}
 {$ENDIF}
 
 constructor TWEvent.Create;
@@ -907,12 +914,16 @@ function TWThread.GetAffinityMask: Cardinal;
 var
     cpuset: PtrUInt;
 begin
+    {$IFDEF DARWIN}
+        result := 0;
+    {$ELSE}
     //res := pthread_getaffinity_np(ThreadID, 4, @cpuset);
     if pthread_getaffinity_np(ThreadID, SizeOf(cpuset), @cpuset) = 0 then begin
         FAffinityMask := cpuset;
     end else begin
         FAffinityMask := 0;
     end;
+    {$ENDIF}
 {$ElSE}
 begin
 {$ENDIF}
@@ -951,11 +962,16 @@ begin
         {$ENDIF}
 {$ENDIF}
 {$IFDEF UNIX}
+        {$IFDEF DARWIN}
+        {$Message WARN 'WTHREAD: No AffinityMask support for DARWIN.'}
+        FAffinityMask := 0;
+        {$ELSE}
         cpuset := Value;
         if pthread_setaffinity_np(ThreadID, SizeOf(cpuset), @cpuset) = 0 then
             FAffinityMask := Value
         else
             FAffinityMask := 0;
+        {$ENDIF}
 {$ENDIF}
     end;
 end;
