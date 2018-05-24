@@ -15,6 +15,7 @@ uses
     FormEditingIntf,
     PropEdits,
     ComponentEditors,
+	LResources,
     {$ELSE}
     DesignEditors,
     DesignIntf,
@@ -96,6 +97,7 @@ implementation
 {$R *.lfm}
 {$ElSE}
 {$R *.dfm}
+{$R wcthread.dcr}
 {$ENDIF}
 
 type
@@ -492,6 +494,7 @@ end;
 
 initialization
 {$IFDEF FPC}
+    {$I wcthread.lrs}
     //Hook := TLazarusHook.Create;
     //Hook.Init;
 {$ENDIF}
