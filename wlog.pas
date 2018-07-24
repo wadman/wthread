@@ -1,5 +1,5 @@
 ﻿unit wlog;
-// wlog (c) wadman, 2015-2018, 02.02.2018
+// wlog (c) wadman, 2015-2018, 17.07.2018
 // multithread safe logging
 
 interface
@@ -22,15 +22,17 @@ var // log file name, default is *.log
     WLogFileName: string;
     // Default logging enabled
     WLogEnabled: boolean;
-    // Default clear log when a programm started
+    // Default clear log when a program started
     WLogClearOnStart: boolean;
     // Log level, see TLogLevel (default WLL_NORMAL, ie MAXIMUM and EXTRA will be ignored)
     WLogLevel: TLogLevel;
 
 function PostToLog(const Text: string): boolean; overload; // with WLL_NORMAL
+function PostToLog(const Text: string; const AClear: boolean): boolean; overload;
 function PostToLog(const Text: string; const Level: TLogLevel): boolean; overload;
 function PostToLog(const ADateTime: TDateTime; const Text: string): boolean; overload; // with WLL_NORMAL
 function PostToLog(const ADateTime: TDateTime; const Text: string; const Level: TLogLevel): boolean; overload;
+function PostToLog(const ADateTime: TDateTime; const Text: string; const AClear: boolean; const Level: TLogLevel): boolean; overload;
 procedure EraseLog;
 
 implementation
@@ -45,6 +47,7 @@ type
     PLogRecord = ^TLogRecord;
     TLogRecord = record
         DT: TDateTime;
+        Clear: boolean;
         PString: PtrUInt;
     end;
 
@@ -65,6 +68,11 @@ begin
     result := PostToLog(Now, Text, WLL_NORMAL);
 end;
 
+function PostToLog(const Text: string; const AClear: boolean): boolean;
+begin
+    result := PostToLog(Now, Text, AClear, WLL_NORMAL);
+end;
+
 function PostToLog(const Text: string; const Level: TLogLevel): boolean; overload;
 begin
     result := PostToLog(Now, Text, Level);
@@ -76,6 +84,11 @@ begin
 end;
 
 function PostToLog(const ADateTime: TDateTime; const Text: string; const Level: TLogLevel): boolean;
+begin
+	result := PostToLog(ADateTime, Text, true, Level);
+end;
+
+function PostToLog(const ADateTime: TDateTime; const Text: string; const AClear: boolean; const Level: TLogLevel): boolean;
 var p: PLogRecord;
 begin
     if (SmallInt(Level) <= SmallInt(WLogLevel)) then begin
@@ -83,6 +96,7 @@ begin
         if result then begin
             p := AllocMem(SizeOf(TLogRecord));
             p^.DT := ADateTime;
+            p^.Clear := AClear;
             p^.PString := NewString(Text);
 {$HINTS OFF}
             result := LogThread.PostToThreadMessage(WM_LOG, 0, PtrUInt(p));
@@ -135,6 +149,7 @@ begin
                 FirstLine := false;
             end;
         end else begin
+			FirstLine := false;
             WLogClearOnStart := false;
             Rewrite(log);
         end;
@@ -155,7 +170,7 @@ begin
     end;
 end;
 
-function AddToLog(const DT: TDateTime; const Text: string): boolean;
+function AddToLog(const DT: TDateTime; const Text: string; const AClear: boolean): boolean;
 
     function ClearText(const AText: string): String;
     var i: integer;
@@ -169,7 +184,13 @@ function AddToLog(const DT: TDateTime; const Text: string): boolean;
 begin
     result := false;
     try
-        WriteLn(log, Format('%s : %s', [FormatDateTime('dd.mm.yyyy hh:nn:ss.zzz', DT), ClearText(Text)]));
+    		if AClear then begin
+        		WriteLn(log, Format('%s : %s', [FormatDateTime('dd.mm.yyyy hh:nn:ss.zzz', DT), ClearText(Text)]));
+				end else begin
+        		WriteLn(log, Format('%s : ---', [FormatDateTime('dd.mm.yyyy hh:nn:ss.zzz', DT)]));
+            Writeln(log, Text);
+        		WriteLn(log, '---');
+        end;
         result := true;
     finally
     end;
@@ -187,7 +208,7 @@ begin
         if (not FileOpened) then
             FileOpened := OpenLog;
         if FileOpened then
-            AddToLog(p^.DT, FreeString(p^.PString));
+            AddToLog(p^.DT, FreeString(p^.PString), p^.Clear);
         if (not LogThread.HaveMessages) or Terminated then
             FileOpened := not CloseLog;
     end else if FileOpened then
@@ -212,10 +233,10 @@ end;
 
 initialization
     FileOpened := false;
-    WLogLevel := WLL_NORMAL;
+    WLogLevel := WLL_NORMAL; // default level
     WLogEnabled := InitLogs;
-    FirstLine := true;
-    WLogClearOnStart := false;
+    FirstLine := true; // first write empty line
+    WLogClearOnStart := true; // empty log on every start
 
 finalization
     DoneLogs;

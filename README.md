@@ -1,6 +1,6 @@
 # wthread
 Component for work with a thread, Delphi&Lazarus (win&wince&*nix)
-(c) wadman 2016-2018, from 02.02.2018
+(c) wadman 2016-2018, from 17.07.2018
 
 This is my component to work with additional threads for Delphi & Lazarus.
 Using them is very easy.
@@ -8,7 +8,15 @@ Drop a TWCThread on the form and add a few tasks.
 In the task you need to write a method OnExecute which will be executed in a different thread.
 Each task is a message flow. All tasks will run in the start order.
 
-Components tested on Ubuntu 14 and 16 LTS, Windows 7, WinCE, Lazarus 1.6/1.7/1.8/1.9, Delphi 7/XE2.
+It is not recommended to use the call to LCL/VCL from the OnExecute method.
+Instead, use the Sender.PostMessage and the OnMessage task handler.
+Check the Terminated flag as often as possible in the OnExecute method.
+This means that the thread handler is waiting for the work to stop. 
+Perhaps the application is already at the closing stage and the user expects it.
+
+Enjoy.
+
+Components tested on Ubuntu 14 and 16 LTS, Windows 7, 8, 10, WinCE, Lazarus 1.6/1.7/1.8/1.9, Delphi 7/XE2/10.
 
 Example project:
 ```
