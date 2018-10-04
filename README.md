@@ -16,7 +16,7 @@ Perhaps the application is already at the closing stage and the user expects it.
 
 Enjoy.
 
-Components tested on Ubuntu 14 and 16 LTS, Windows 7, 8, 10, WinCE, Lazarus 1.6/1.7/1.8/1.9, Delphi 7/XE2/10.
+Components tested on Ubuntu 14 and 16 LTS, Windows 7, 8, 10, WinCE, Lazarus 1.6/1.7/1.8/1.9/2.0/2.1, Delphi 7/XE2/10.
 
 Example project:
 ```
