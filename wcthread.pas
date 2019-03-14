@@ -54,6 +54,7 @@ type
         procedure DoProgress(const Msg: Word; const Value: Word);
         function ItsMe: boolean;
     public
+        constructor Create(AOwner: TComponent); override;
         destructor Destroy; override;
         // Start this task on a different thread, like a PostMessage
         procedure Start(const ACaller: TWCThread; const AMsg: Word; const AParam: Variant); overload;
@@ -104,6 +105,7 @@ type
 
     TWCThread = class(TComponent)
     private
+        FAutoDestroy: boolean;
         FAutoStart: boolean;
         FParam: Variant;
         FOnAllTasksFinished: TWCThreadNotify;
@@ -148,6 +150,8 @@ type
         // Start thread in a idle state when component is created at runtime.
         // False = thread started when a first task executed
         property AutoStart: boolean read FAutoStart write SetAutoStart default true;
+        // Set Terminated flag when component destroyed (check TTask.Terminated)
+        property AutoDestroy: boolean read FAutoDestroy write FAutoDestroy default true;
         // Thread priority
         property Priority: TThreadPriority read GetThreadPriority write SetThreadPriority default tpNormal;
         // Custom param for all tasks
@@ -243,11 +247,14 @@ begin
     FPriority := tpNormal;
     FTasks := TOwnedList.Create(Self);
     FAutoStart := true;
+    FAutoDestroy := true;
 end;
 
 destructor TWCThread.Destroy;
 begin
     FTerminated := true;
+    if AutoDestroy then
+	    FinishAllTasks(0);
     if Assigned(FWThread) then begin
         FWThread.Terminate;
         FWThread.WaitFor;
@@ -512,6 +519,13 @@ end;
 
 { TTask }
 
+constructor TTask.Create(AOwner: TComponent);
+begin
+    inherited Create(AOwner);
+    if AOwner is TWCThread then
+        Parent := (AOwner as TWCThread);
+end;
+
 destructor TTask.Destroy;
 begin
     PreDestroy;
@@ -612,11 +626,15 @@ end;
 procedure TTask.SetParent(const Value: TWCThread);
 begin
     if FParent <> Value then begin
-        if Assigned(FParent) then
+        if Assigned(FParent) and (not FParent.Terminated) then
             FParent.FTasks.Remove(Self);
         FParent := Value;
-        if Assigned(FParent) then
-            FParent.FTasks.Add(Self);
+        if Assigned(FParent) then begin
+            if (not FParent.Terminated) then
+                FParent.FTasks.Add(Self)
+            else
+                raise Exception.Create('Can''t change Parent to the dead thread.');
+        end;
     end;
 end;
 
