@@ -12,4 +12,6 @@ uses LCLVersion;
 {$If (lcl_fullversion>=1090000) and (lcl_fullversion<2000000)}
 {$define ver19}
 {$ENDIF}
-
+{$If (lcl_fullversion>=2000000) and (lcl_fullversion<2090000)}
+{$define ver20}
+{$ENDIF}

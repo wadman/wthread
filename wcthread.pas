@@ -1,7 +1,7 @@
 unit wcthread;
 // component for work with a thread, Delphi&Lazarus (win&wince&*nix)
 //
-// (c) wadman 2016-2018, from 30.03.2018
+// (c) wadman 2016-2019, from 14.03.2019
 
 
 interface
