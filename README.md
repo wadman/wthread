@@ -38,7 +38,7 @@ type
     Label1: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure TaskCheckLicenseExecute(const Sender: TTask; const Msg: Word; var Param: Variant);
-	procedure TaskCheckLicenseMessage(const Sender: TTask; const Msg: Word; const Param: Variant);
+    procedure TaskCheckLicenseMessage(const Sender: TTask; const Msg: Word; const Param: Variant);
     procedure TaskCheckLicenseFinish(const Sender: TTask; const Msg: Word; const Param: Variant);
   private
     { Private declarations }
