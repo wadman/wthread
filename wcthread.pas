@@ -668,7 +668,7 @@ end;
 
 procedure TTask.Start(const ACaller: TWCThread; const AMsg: Word; const AParam: Variant);
 begin
-    if Terminated then
+    if Terminated and (State <> tsFinished) then
         raise Exception.CreateFmt('%s cannot start while destroying.', [Name]);
     FTerminated := false;
     FCaller := ACaller;
