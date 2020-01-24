@@ -1,5 +1,5 @@
 ﻿unit wlog;
-// wlog (c) wadman, 2015-2018, 17.07.2018
+// wlog (c) wadman, 2015-2020, 22.01.2020
 // multithread safe logging
 
 interface
@@ -34,14 +34,16 @@ function PostToLog(const ADateTime: TDateTime; const Text: string): boolean; ove
 function PostToLog(const ADateTime: TDateTime; const Text: string; const Level: TLogLevel): boolean; overload;
 function PostToLog(const ADateTime: TDateTime; const Text: string; const AClear: boolean; const Level: TLogLevel): boolean; overload;
 procedure EraseLog;
+procedure TruncateLog(const AMaxSize: longint);
 
 implementation
 
-uses SysUtils, WThread;
+uses StrUtils, SysUtils, WThread;
 
 const
     WM_LOG      = WM_WTHREAD_BASE + 1;
     WM_ERASE    = WM_WTHREAD_BASE + 2;
+    WM_TRUNC		= WM_WTHREAD_BASE + 3;
 
 type
     PLogRecord = ^TLogRecord;
@@ -55,6 +57,7 @@ type
     private
         procedure WMLog(var Msg: TThreadMessage); message WM_LOG;
         procedure WMErase(var Msg: TThreadMessage); message WM_ERASE;
+        procedure WMTruncateLog(var Msg: TThreadMessage); message WM_TRUNC;
     end;
 
 var
@@ -115,6 +118,11 @@ begin
     LogThread.PostToThreadMessage(WM_ERASE, 0, 0);
 end;
 
+procedure TruncateLog(const AMaxSize: longint);
+begin
+ 		LogThread.PostToThreadMessage(WM_TRUNC, 0, AMaxSize);
+end;
+
 function InitLogs: boolean;
 begin
     WLogFileName := ChangeFileExt(ParamStr(0), '.log');
@@ -149,7 +157,7 @@ begin
                 FirstLine := false;
             end;
         end else begin
-			FirstLine := false;
+						FirstLine := false;
             WLogClearOnStart := false;
             Rewrite(log);
         end;
@@ -216,6 +224,27 @@ begin
     FreeMem(p);
 end;
 
+procedure TLogThread.WMTruncateLog(var Msg: TThreadMessage);
+var f: File;
+		need: boolean;
+begin
+    if FileOpened then
+        FileOpened := not CloseLog;
+    try
+        if (not FileOpened) and (FileExists(WLogFileName)) then begin
+            AssignFile(f, WLogFileName);
+            Reset(f, 1);
+            need := FileSize(f) >= Msg.LParam;
+            CloseFile(f);
+            if need then begin
+								Rename(f, Copy(WLogFileName, 1, Length(WLogFileName)-4)+FormatDateTime('"_"yyyymmddhhnnss".log"', Now));
+            end;
+        end;
+    except on e: exception do
+
+    end;
+end;
+
 procedure TLogThread.WMErase(var Msg: TThreadMessage);
 var f: File;
 begin
@@ -233,10 +262,10 @@ end;
 
 initialization
     FileOpened := false;
-    WLogLevel := WLL_NORMAL; // default level
+    WLogLevel := WLL_NORMAL;
     WLogEnabled := InitLogs;
-    FirstLine := true; // first write empty line
-    WLogClearOnStart := true; // empty log on every start
+    FirstLine := true;
+    WLogClearOnStart := true;
 
 finalization
     DoneLogs;
