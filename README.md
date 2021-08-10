@@ -1,6 +1,6 @@
 # wthread
 Component for work with a thread, Delphi&Lazarus (win&wince&*nix)
-(c) wadman 2016-2019, from 14.03.2019
+(c) wadman 2016-2021, from 10.08.2021
 
 This is my component to work with additional threads for Delphi & Lazarus.
 Using them is very easy.
@@ -16,7 +16,7 @@ Perhaps the application is already at the closing stage and the user expects it.
 
 Enjoy.
 
-Components tested on Ubuntu 14 and 16 LTS, Windows 7, 8, 10, WinCE, Lazarus 1.6/1.7/1.8/1.9/2.0/2.1, Delphi 7/XE2/10.
+Components tested on Ubuntu 14 and 16 LTS, Windows 7, 8, 10, WinCE, Lazarus 1.6/1.7/1.8/1.9/2.0/2.1/2.2, Delphi 7/XE2/10.
 
 Example project:
 ```

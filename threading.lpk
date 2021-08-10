@@ -15,7 +15,7 @@
       </SearchPaths>
     </CompilerOptions>
     <Description Value="Support simple multithreading"/>
-    <Version Major="1" Build="6"/>
+    <Version Major="1" Build="8"/>
     <Files Count="4">
       <Item1>
         <Filename Value="wcthread.pas"/>

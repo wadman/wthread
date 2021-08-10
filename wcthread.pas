@@ -251,6 +251,7 @@ begin
 end;
 
 destructor TWCThread.Destroy;
+var i: integer;
 begin
     FTerminated := true;
     if AutoDestroy then
@@ -260,6 +261,9 @@ begin
         FWThread.WaitFor;
         FWThread.Free;
         FWThread := nil;
+    end;
+    for i := Tasks.Count-1 downto 0 do begin
+        Task[i].Free;
     end;
     FTasks.Free;
     inherited;
@@ -626,7 +630,7 @@ end;
 procedure TTask.SetParent(const Value: TWCThread);
 begin
     if FParent <> Value then begin
-        if Assigned(FParent) and (not FParent.Terminated) then
+        if Assigned(FParent) {and (not FParent.Terminated)} then
             FParent.FTasks.Remove(Self);
         FParent := Value;
         if Assigned(FParent) then begin

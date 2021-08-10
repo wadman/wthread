@@ -38,12 +38,12 @@ procedure TruncateLog(const AMaxSize: longint);
 
 implementation
 
-uses StrUtils, SysUtils, WThread;
+uses SysUtils, WThread;
 
 const
     WM_LOG      = WM_WTHREAD_BASE + 1;
     WM_ERASE    = WM_WTHREAD_BASE + 2;
-    WM_TRUNC		= WM_WTHREAD_BASE + 3;
+    WM_TRUNC	= WM_WTHREAD_BASE + 3;
 
 type
     PLogRecord = ^TLogRecord;
@@ -226,7 +226,7 @@ end;
 
 procedure TLogThread.WMTruncateLog(var Msg: TThreadMessage);
 var f: File;
-		need: boolean;
+    need: boolean;
 begin
     if FileOpened then
         FileOpened := not CloseLog;

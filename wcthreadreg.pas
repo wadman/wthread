@@ -15,7 +15,7 @@ uses
     FormEditingIntf,
     PropEdits,
     ComponentEditors,
-	LResources,
+    LResources,
     {$ELSE}
     DesignEditors,
     DesignIntf,
@@ -56,12 +56,14 @@ type
         procedure actAddExecute(Sender: TObject);
         procedure actDeleteExecute(Sender: TObject);
         procedure ActionList1Update(AAction: TBasicAction; var Handled: Boolean);
+        procedure FormCreate(Sender: TObject);
         procedure FormDestroy(Sender: TObject);
         procedure lvTasksEdited(Sender: TObject; Item: TListItem; var S: string);
         procedure lvTasksSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
         procedure FormClose(Sender: TObject; var AAction: TCloseAction);
         procedure lvTasksDblClick(Sender: TObject);
     private
+        FOldCaption: string;
         {$IFDEF FPC}
         FDesigner: TComponentEditorDesigner;
         {$ENDIF}
@@ -73,15 +75,22 @@ type
         {$ENDIF}
         procedure SetComponent(const Value: TWCThread);
         function GetSelectedTask: TTask;
+        procedure UpdateCaption;
+        {$ifdef FPC}
+        procedure OnPersistentAdded(APersistent: TPersistent; Select: boolean);
+        procedure OnComponentRenamed(AComponent: TComponent);
+        procedure OnPersistentDeleting(APersistent: TPersistent);
+        {$endif}
     protected
         procedure UpdateList;
         procedure SetSelection;
         procedure Modified;
-        procedure OnModified(Sender: TObject);
     public
         {$IFDEF FPC}
         property Designer: TComponentEditorDesigner read FDesigner write SetDesigner;
         {$ELSE}
+        procedure ItemInserted(const ADesigner: IDesigner; Item: TPersistent); override;
+        procedure ItemDeleted(const ADesigner: IDesigner; Item: TPersistent); override;
         procedure ItemsModified(const Designer: IDesigner); override;
         {$ENDIF}
         property Component: TWCThread read FComponent write SetComponent;
@@ -103,22 +112,6 @@ implementation
 type
 
     {$IFDEF FPC}
-    { TLazarusHook }
-
-    TLazarusHook = class
-        FNeedUpdate: boolean;
-        procedure Init;
-        procedure OnPersistentAdded(APersistent: TPersistent; Select: boolean);
-        procedure OnComponentRenamed(AComponent: TComponent);
-        procedure OnPersistentDeleting(APersistent: TPersistent);
-        procedure OnPersistentDeleted;
-        {$ifdef ver16}
-        procedure OnModified(Sender: TObject; PropName: ShortString);
-        {$else}
-        procedure OnModified(Sender: TObject);
-        {$endif}
-        procedure Done;
-    end;
     {$ELSE}
     PtrInt = NativeInt;
     {$ENDIF}
@@ -145,99 +138,11 @@ begin
     end;
 end;
 
-{$IFDEF FPC}
-{ TLazarusHook }
-
-var Hook: TLazarusHook;
-
-procedure TLazarusHook.Init;
-begin
-    GlobalDesignHook.AddHandlerPersistentDeleting(OnPersistentDeleting);
-    GlobalDesignHook.AddHandlerPersistentDeleted(OnPersistentDeleted);
-    GlobalDesignHook.AddHandlerModified(OnModified);
-    GlobalDesignHook.AddHandlerPersistentAdded(OnPersistentAdded);
-    GlobalDesignHook.AddHandlerComponentRenamed(OnComponentRenamed);
-end;
-
-procedure TLazarusHook.OnPersistentAdded(APersistent: TPersistent; Select: boolean);
-begin
-    if APersistent is TTask then begin
-        if Assigned(frmTaskEditor)and(frmTaskEditor.Component = (APersistent as TTask).Parent) then begin
-            Select := true;
-            frmTaskEditor.OnModified(Self);
-        end;
-    end;
-end;
-
-procedure TLazarusHook.OnComponentRenamed(AComponent: TComponent);
-begin
-    if AComponent is TTask then begin
-        if Assigned(frmTaskEditor)and(frmTaskEditor.Component = AComponent) then begin
-            frmTaskEditor.OnModified(Self);
-        end;
-    end;
-end;
-
-procedure TLazarusHook.OnPersistentDeleting(APersistent: TPersistent);
-var t: TWCThread;
-begin
-    if APersistent is TWCThread then begin
-        t := APersistent as TWCThread;
-        if Assigned(frmTaskEditor) then begin
-            frmTaskEditor.Close;
-            frmTaskEditor := nil;
-        end;
-        while t.Tasks.Count > 0 do begin
-            t.task[0].free;
-        end;
-        if GlobalDesignHook <> nil then
-            GlobalDesignHook.PersistentDeleted;
-    end else if APersistent is TTask then begin
-        FNeedUpdate := Assigned(frmTaskEditor);
-        if GlobalDesignHook <> nil then
-            GlobalDesignHook.PersistentDeleted;
-    end;
-end;
-
-procedure TLazarusHook.OnPersistentDeleted;
-begin
-    if (FNeedUpdate) and Assigned(frmTaskEditor) then begin
-        frmTaskEditor.OnModified(Self);
-    end;
-    FNeedUpdate := false;
-end;
-
-{$ifdef ver16}
-procedure TLazarusHook.OnModified(Sender: TObject; PropName: ShortString);
-{$else}
-procedure TLazarusHook.OnModified(Sender: TObject);
-{$EndIf}
-begin
-    if Assigned(frmTaskEditor) then begin
-        frmTaskEditor.OnModified(Self);
-    end;
-end;
-
-procedure TLazarusHook.Done;
-begin
-    GlobalDesignHook.RemoveHandlerPersistentAdded(OnPersistentAdded);
-    GlobalDesignHook.RemoveHandlerPersistentDeleting(OnPersistentDeleting);
-    GlobalDesignHook.RemoveHandlerPersistentDeleted(OnPersistentDeleted);
-    GlobalDesignHook.RemoveHandlerModified(OnModified);
-    GlobalDesignHook.RemoveHandlerComponentRenamed(OnComponentRenamed);
-end;
-{$ENDIF}
-
 procedure Register;
 begin
     RegisterClass(TTask);
     RegisterNoIcon([TTask]);
     RegisterComponents('System', [TWCThread]);
-    {$IFDEF FPC}
-    Hook := TLazarusHook.Create;
-    Hook.Init;
-    {$ELSE}
-    {$ENDIF}
     RegisterPropertyEditor(TypeInfo(TOwnedList), TWCThread, 'Tasks', TTasksEditor);
     RegisterComponentEditor(TWCThread, TWCThreadEditor);
 end;
@@ -314,27 +219,42 @@ begin
     i := lvTasks.Items.IndexOf(lvTasks.Selected);
     task := SelectedTask;
     lvTasks.Items.Delete(i);
-    FComponent.Tasks.Remove(task);
-    task.Free;
+    Component.Tasks.Remove(task);
     {$IFDEF FPC}
-    if Assigned(Designer) then
-        Designer.PropertyEditorHook.PersistentDeleted;
+    //if Assigned(Designer) then
+    //    Designer.PropertyEditorHook.PersistentDeleted{$ifdef ver22}(task){$endif};
     {$ELSE}
     //lvTasks.DeleteSelected;
     {$ENDIF}
+    task.Free;
     Modified;
 end;
 
 procedure TfrmTaskEditor.ActionList1Update(AAction: TBasicAction; var Handled: Boolean);
 begin
-    actDelete.Enabled := Assigned(lvTasks.Selected) and (lvTasks.SelCount = 1);
+    actAdd.Enabled := Assigned(Component);
+    actDelete.Enabled := actAdd.Enabled and Assigned(lvTasks.Selected) and (lvTasks.SelCount = 1);
     Handled := true;
+end;
+
+procedure TfrmTaskEditor.FormCreate(Sender: TObject);
+begin
+    {$ifdef FPC}
+    if Assigned(GlobalDesignHook) then begin
+        GlobalDesignHook.AddHandlerPersistentDeleting(OnPersistentDeleting);
+        GlobalDesignHook.AddHandlerPersistentAdded(OnPersistentAdded);
+        GlobalDesignHook.AddHandlerComponentRenamed(OnComponentRenamed);
+    end;
+    {$endif}
 end;
 
 procedure TfrmTaskEditor.FormDestroy(Sender: TObject);
 begin
     {$IFDEF FPC}
     Designer := nil;
+    if Assigned(GlobalDesignHook) then begin
+        GlobalDesignHook.RemoveAllHandlersForObject(Self);
+    end;
     {$ENDIF}
 end;
 
@@ -352,19 +272,76 @@ begin
         result := nil;
 end;
 
+procedure TfrmTaskEditor.UpdateCaption;
+begin
+    if FOldCaption = '' then FOldCaption := Caption;
+    if Assigned(Component) then
+        Caption := Format('%s = %s', [FOldCaption, Component.Name])
+    else
+        Caption := FOldCaption;
+end;
+
 {$IFDEF FPC}
+
+procedure TfrmTaskEditor.OnPersistentAdded(APersistent: TPersistent; Select: boolean);
+begin
+     if Assigned(Component) and (APersistent is TTask) and (Component.Tasks.IndexOf(APersistent) >= 0) then begin
+        UpdateList;
+     end;
+end;
+
+procedure TfrmTaskEditor.OnComponentRenamed(AComponent: TComponent);
+begin
+    if Assigned(Component) then begin
+        if AComponent = Component then begin
+            UpdateCaption;
+        end else if (AComponent is TTask) and (Component.Tasks.IndexOf(AComponent) >= 0) then begin
+            lvTasks.Items[Component.Tasks.IndexOf(AComponent)].Caption := (AComponent as TTask).Name;
+        end;
+    end;
+end;
+
+procedure TfrmTaskEditor.OnPersistentDeleting(APersistent: TPersistent);
+begin
+    if Assigned(Component) then begin
+        if APersistent = Component then begin
+            Component := nil;
+        end else if (APersistent is TTask) and (Component.Tasks.IndexOf(APersistent) >= 0) then begin
+            lvTasks.Items.Delete(Component.Tasks.IndexOf(APersistent));
+        end;
+    end;
+end;
+
 procedure TfrmTaskEditor.SetDesigner(AValue: TComponentEditorDesigner);
 begin
     if FDesigner=AValue then Exit;
     FDesigner:=AValue;
 end;
-{$ENDIF}
 
-{$IFDEF FPC}
 {$ELSE}
+
+procedure TfrmTaskEditor.ItemDeleted(const ADesigner: IDesigner; Item: TPersistent);
+begin
+    if Assigned(Component) then begin
+        if Item = Component then begin
+            Component := nil;
+        end else if (Item is TTask) and (Component.Tasks.IndexOf(Item) >= 0) then begin
+            lvTasks.Items.Delete(Component.Tasks.IndexOf(Item));
+        end;
+    end;
+end;
+
+procedure TfrmTaskEditor.ItemInserted(const ADesigner: IDesigner; Item: TPersistent);
+begin
+     if Assigned(Component) and (Item is TTask) and (Component.Tasks.IndexOf(Item) >= 0) then begin
+        UpdateList;
+     end;
+end;
+
 procedure TfrmTaskEditor.ItemsModified(const Designer: IDesigner);
 begin
     UpdateList;
+    UpdateCaption;
 end;
 {$ENDIF}
 
@@ -383,6 +360,12 @@ procedure TfrmTaskEditor.lvTasksEdited(Sender: TObject; Item: TListItem; var S: 
 begin
     if Assigned(SelectedTask) then begin
         SelectedTask.Name := S;
+        {$IFDEF FPC}
+        if Assigned(Designer) then
+            Designer.PropertyEditorHook.ComponentRenamed(SelectedTask);
+        {$ELSE}
+        //lvTasks.DeleteSelected;
+        {$ENDIF}
         Modified;
     end;
 end;
@@ -400,6 +383,7 @@ begin
     //FDesigner := FindRootDesigner(FComponent);
     {$ENDIF}
     UpdateList;
+    UpdateCaption;
 end;
 
 {$IFDEF FPC}
@@ -434,11 +418,6 @@ begin
         Designer.Modified;
 end;
 
-procedure TfrmTaskEditor.OnModified(Sender: TObject);
-begin
-    UpdateList;
-end;
-
 procedure TfrmTaskEditor.UpdateList;
 var s, i: integer;
 begin
@@ -446,10 +425,12 @@ begin
     try
         lvTasks.Items.BeginUpdate;
         lvTasks.Clear;
-        for I := 0 to FComponent.Tasks.Count-1 do
-            lvTasks.AddItem(FComponent.Task[i].Name, FComponent.Task[i]);
-        if (s >= 0) and (s < lvTasks.Items.Count) then
-            lvTasks.ItemIndex := s;
+        if Assigned(Component) then begin
+            for I := 0 to Component.Tasks.Count-1 do
+                lvTasks.AddItem(Component.Task[i].Name, Component.Task[i]);
+            if (s >= 0) and (s < lvTasks.Items.Count) then
+                lvTasks.ItemIndex := s;
+        end;
     finally
         lvTasks.Items.EndUpdate;
     end;
@@ -484,7 +465,7 @@ end;
 
 function TTasksEditor.GetAttributes: TPropertyAttributes;
 begin
-    Result := [paDialog];
+    Result := [paDialog, paReadOnly];
 end;
 
 function TTasksEditor.GetValue: string;
@@ -495,14 +476,8 @@ end;
 initialization
 {$IFDEF FPC}
     {$I wcthread.lrs}
-    //Hook := TLazarusHook.Create;
-    //Hook.Init;
 {$ENDIF}
 
 finalization
-{$IFDEF FPC}
-    //Hook.Done;
-    //Hook.Free;
-{$ENDIF}
 
 end.
